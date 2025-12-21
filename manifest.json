@@ -1,0 +1,41 @@
+{
+    "manifest_version": 3,
+    "name": "AI 阅卷助手 (Kimi.com修复版)",
+    "version": "3.2",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "tabs",
+        "storage"
+    ],
+    "host_permissions": [
+        "*://*.wxy100.com/*",
+        "*://exam.wxy100.com/*"
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://kimi.com/*",
+                "*://www.kimi.com/*"
+            ],
+            "js": [
+                "content_ai.js"
+            ]
+        },
+        {
+            "matches": [
+                "*://*.wxy100.com/*"
+            ],
+            "js": [
+                "content_school.js"
+            ],
+            "run_at": "document_end"
+        }
+    ]
+}

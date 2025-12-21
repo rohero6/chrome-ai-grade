@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 320px;
+            padding: 15px;
+            font-family: sans-serif;
+        }
+
+        .group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            background: #4CAF50;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        #status {
+            margin-top: 10px;
+            color: green;
+            text-align: center;
+            font-size: 12px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="group">
+        <label>📚 学科</label>
+        <select id="subject">
+            <option value="语文">语文</option>
+            <option value="数学">数学</option>
+            <option value="英语">英语</option>
+            <option value="历史">历史</option>
+            <option value="政治">政治</option>
+        </select>
+    </div>
+    <div class="group">
+        <label>📝 参考答案 / 评分标准</label>
+        <textarea id="standard" placeholder="例如：提到'坚持'得2分，提到'奋斗'得2分..."></textarea>
+    </div>
+    <button id="save">💾 保存配置</button>
+    <div id="status">已保存，下次评分生效！</div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
