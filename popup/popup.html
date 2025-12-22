@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 400px;
+            padding: 0;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 500px;
+        }
+
+        .container {
+            background: white;
+            margin: 12px;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        }
+
+        h3 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h3::before {
+            content: '🤖';
+            font-size: 24px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            font-size: 13px;
+            color: #667eea;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .col {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        select,
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            font-size: 13px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fafafa;
+        }
+
+        select:focus,
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 70px;
+            font-family: inherit;
+        }
+
+        /* AI 平台选择卡片 */
+        .platform-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .platform-card {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e8e8e8;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+
+        .platform-card:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .platform-card.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .platform-card .icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .platform-card .name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .platform-card.active .name {
+            color: #667eea;
+        }
+
+        /* 答案卡片样式 */
+        .answer-card {
+            background: #f8f9ff;
+            border: 1px solid #e8e8e8;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        .answer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .answer-title {
+            font-weight: 600;
+            font-size: 12px;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .answer-title::before {
+            content: '📝';
+        }
+
+        .btn-del {
+            background: none;
+            border: none;
+            color: #ff6b6b;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .btn-del:hover {
+            background: #fff0f0;
+        }
+
+        .btn-add {
+            width: 100%;
+            background: white;
+            border: 2px dashed #667eea;
+            color: #667eea;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .btn-add:hover {
+            background: #f8f9ff;
+            border-style: solid;
+        }
+
+        .btn-save {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-save:active {
+            transform: translateY(0);
+        }
+
+        #status {
+            margin-top: 12px;
+            padding: 10px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 8px;
+            display: none;
+        }
+
+        /* 支持的网站列表 */
+        .supported-sites {
+            margin-top: 20px;
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .supported-sites .title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #666;
+        }
+
+        .supported-sites .site-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .supported-sites .site-tag {
+            background: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h3>AI 阅卷配置</h3>
+
+        <!-- AI 平台选择 -->
+        <div class="section-title">🤖 选择 AI 平台</div>
+        <div class="platform-selector" id="platform-selector">
+            <div class="platform-card" data-platform="kimi">
+                <div class="icon">🌙</div>
+                <div class="name">Kimi</div>
+            </div>
+            <div class="platform-card" data-platform="doubao">
+                <div class="icon">🫘</div>
+                <div class="name">豆包</div>
+            </div>
+            <div class="platform-card" data-platform="deepseek">
+                <div class="icon">🔍</div>
+                <div class="name">DeepSeek</div>
+            </div>
+        </div>
+
+        <!-- 基本配置 -->
+        <div class="section-title">📚 题目信息</div>
+        <div class="row">
+            <div class="col">
+                <label>学科</label>
+                <select id="subject"></select>
+            </div>
+            <div class="col">
+                <label>题型</label>
+                <select id="questionType"></select>
+            </div>
+            <div class="col" style="flex: 0.6;">
+                <label>总分</label>
+                <input type="number" id="totalScore" value="6" min="0" max="100">
+            </div>
+        </div>
+
+        <!-- 答案设置 -->
+        <div class="section-title">✏️ 参考答案</div>
+        <div id="answers-container"></div>
+        <button id="add-answer" class="btn-add">+ 添加采分点</button>
+
+        <!-- 评分规则 -->
+        <div class="section-title">📋 评分规则</div>
+        <textarea id="gradingRules" placeholder="例如：答到 3 个要点即满分。错别字每个扣 0.5 分，最多扣 2 分。"></textarea>
+
+        <!-- 保存按钮 -->
+        <button id="save" class="btn-save">💾 保存配置</button>
+        <div id="status">✅ 配置已保存</div>
+
+        <!-- 支持的网站 -->
+        <div class="supported-sites">
+            <div class="title">📍 支持的改卷网站</div>
+            <div class="site-list" id="supported-sites-list">
+                <span class="site-tag">wxy100.com</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
+

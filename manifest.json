@@ -1,41 +1,54 @@
 {
-    "manifest_version": 3,
-    "name": "AI 阅卷助手 (Kimi.com修复版)",
-    "version": "3.2",
-    "permissions": [
-        "activeTab",
-        "scripting",
-        "tabs",
-        "storage"
-    ],
-    "host_permissions": [
+  "manifest_version": 3,
+  "name": "AI 阅卷助手 (多平台版)",
+  "version": "4.0",
+  "description": "支持多个改卷网站和多个 AI 平台的自动阅卷工具",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.wxy100.com/*",
+    "*://exam.wxy100.com/*",
+    "*://kimi.com/*",
+    "*://www.kimi.com/*",
+    "*://kimi.moonshot.cn/*",
+    "*://www.doubao.com/*",
+    "*://doubao.com/*",
+    "*://chat.deepseek.com/*",
+    "*://www.deepseek.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "AI 阅卷助手"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
         "*://*.wxy100.com/*",
         "*://exam.wxy100.com/*"
-    ],
-    "action": {
-        "default_popup": "popup.html"
+      ],
+      "js": ["content-scripts/grading-site-loader.js"],
+      "run_at": "document_end"
     },
-    "background": {
-        "service_worker": "background.js"
-    },
-    "content_scripts": [
-        {
-            "matches": [
-                "*://kimi.com/*",
-                "*://www.kimi.com/*"
-            ],
-            "js": [
-                "content_ai.js"
-            ]
-        },
-        {
-            "matches": [
-                "*://*.wxy100.com/*"
-            ],
-            "js": [
-                "content_school.js"
-            ],
-            "run_at": "document_end"
-        }
-    ]
+    {
+      "matches": [
+        "*://kimi.com/*",
+        "*://www.kimi.com/*",
+        "*://kimi.moonshot.cn/*",
+        "*://www.doubao.com/*",
+        "*://doubao.com/*",
+        "*://chat.deepseek.com/*",
+        "*://www.deepseek.com/*"
+      ],
+      "js": ["content-scripts/ai-platform-loader.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {}
 }
