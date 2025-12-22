@@ -22,44 +22,54 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function handleKimiGrading(data) {
     console.log("🚀 开始处理新题目...");
 
-    // 1. 记数
-    const bubblesSelector = 'div[class*="markdown"]';
-    const initialCount = document.querySelectorAll(bubblesSelector).length;
+    // ... (输入框查找、粘贴图片逻辑保持不变) ...
+    // 假设已经粘贴完图片
 
-    // 2. 找输入框
-    let editor = document.querySelector('div[contenteditable="true"]') || document.querySelector('#chat-input');
-    if (!editor) {
-        console.error("❌ 找不到输入框");
-        chrome.runtime.sendMessage({ type: "ERROR", message: "找不到 Kimi 输入框" });
-        return;
-    }
-    editor.focus();
+    // --- 【核心】构造超级 Prompt ---
+    const cfg = data.config; // 接收传过来的复杂配置
 
-    // 3. 粘贴图片
-    if (data.imagesBase64 && data.imagesBase64.length > 0) {
-        const dataTransfer = new DataTransfer();
-        for (let i = 0; i < data.imagesBase64.length; i++) {
-            const blob = base64ToBlob(data.imagesBase64[i]);
-            const file = new File([blob], `answer_${i}.png`, { type: "image/png" });
-            dataTransfer.items.add(file);
-        }
-        editor.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dataTransfer }));
-        // 因为现在在前台，不需要死等，交给 robustSendLogic 去判断
+    // 1. 构建答案列表字符串
+    let answersPrompt = "";
+    if (cfg.answers && cfg.answers.length > 0) {
+        cfg.answers.forEach((ans, index) => {
+            answersPrompt += `
+【采分点 ${index + 1}】(分值: ${ans.score}分)
+- 标准答案内容：${ans.content}
+- 核心关键词：${ans.keywords ? ans.keywords : "无"}
+`;
+        });
+    } else {
+        answersPrompt = "无具体标准答案，请根据学科常识判断。";
     }
 
-    // 4. 填文字
-    const promptText = `科目：${data.subject}。评分标准：${data.standard}。请打分，只返回数字。`;
+    // 2. 拼接最终 Prompt
+    const promptText = `
+我需要你扮演阅卷老师。
+【基本信息】：科目-${cfg.subject} | 题型-${cfg.questionType} | 本题满分-${cfg.totalScore}分。
+
+【参考答案与采分点】：
+${answersPrompt}
+
+【整体评分规则】：
+${cfg.gradingRules ? cfg.gradingRules : "请根据答案匹配度酌情给分。"}
+
+【任务要求】：
+请根据学生作答图片（已粘贴），结合上述采分点和关键词进行打分。
+**重要：请严格按照标准，只返回一个最终分数的数字（例如：4），不要输出任何解释或多余文字。**
+`;
+
+    // 3. 填入文字并发送
     document.execCommand('insertText', false, promptText);
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     await sleep(500);
 
-    // 5. 发送 (闭环验证)
+    // 4. 发送 (闭环验证)
     const sendSuccess = await robustSendLogic(editor);
 
     if (sendSuccess) {
         waitForNewResponseAndSwitchBack(initialCount);
     } else {
-        chrome.runtime.sendMessage({ type: "ERROR", message: "发送失败，可能卡住了" });
+        chrome.runtime.sendMessage({ type: "ERROR", message: "发送失败" });
     }
 }
 

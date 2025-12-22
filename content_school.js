@@ -18,10 +18,20 @@ function getStudentAnswerImageUrls() {
 }
 
 // 开始流程
-function startGrading() {
+async function startGrading() {
     if (config.isGrading) return;
 
-    chrome.storage.local.get(['subject', 'standard'], (settings) => {
+    // 读取新的 gradingConfig 对象
+    chrome.storage.local.get(['gradingConfig'], (result) => {
+        // 如果用户还没配置过，给个默认空对象
+        const settings = result.gradingConfig || {
+            subject: "通用",
+            questionType: "通用",
+            totalScore: 10,
+            answers: [],
+            gradingRules: "无"
+        };
+
         const imageUrls = getStudentAnswerImageUrls();
 
         if (imageUrls.length === 0) {
@@ -37,8 +47,8 @@ function startGrading() {
         chrome.runtime.sendMessage({
             type: "DOWNLOAD_AND_GRADE_REQUEST",
             imageUrls: imageUrls,
-            subject: settings.subject || "通用",
-            standard: settings.standard || "无标准"
+            // 直接把整个配置对象传过去
+            config: settings
         });
     });
 }

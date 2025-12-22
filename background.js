@@ -85,7 +85,8 @@ function switchToKimiAndRun(imagesBase64, request) {
                         type: "DO_AI_TASK",
                         imagesBase64: imagesBase64,
                         subject: request.subject,
-                        standard: request.standard
+                        standard: request.standard,
+                        config: request.config // 只要把这个透传过去就行
                     });
                 }, 500);
             });
