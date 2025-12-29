@@ -381,40 +381,43 @@ ${cfg.gradingRules ? cfg.gradingRules : "请根据答案匹配度酌情给分。
         return true;
       },
       
-      getSendButton() {
-        return document.querySelector('[data-testid="send-button"]') ||
-               document.querySelector('button[class*="send"]');
-      },
-      
       async clickSend() {
+        console.log('[DeepSeek] 尝试 Enter 发送...');
         const maxAttempts = 60;
         const editor = this.getInputEditor();
         
-        // 尝试 Enter 键发送
-        const btn = this.getSendButton();
-        if (!btn) {
-          editor?.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            bubbles: true
-          }));
-          await sleep(800);
-          return true;
+        if (!editor) {
+          console.error('[DeepSeek] 未找到输入框');
+          return false;
         }
-        
+
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          if (btn && !btn.disabled) {
-            btn.click();
-            await sleep(800);
-            
-            const content = editor?.value || editor?.innerText || '';
-            if (content.replace(/\s/g, '').length < 5) {
-              return true;
-            }
+          // 确保输入框聚焦
+          editor.focus();
+          await sleep(100);
+          
+          // 直接用 Enter 发送
+          const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter', 
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true
+          });
+          editor.dispatchEvent(enterEvent);
+          await sleep(800);
+          
+          // 检查是否发送成功（输入框清空）
+          const content = editor?.value || editor?.innerText || '';
+          if (content.replace(/\s/g, '').length < 5) {
+            console.log('[DeepSeek] ✅ 发送成功');
+            return true;
           }
+          
           await sleep(500);
         }
+        console.warn('[DeepSeek] 发送超时');
         return false;
       },
       
