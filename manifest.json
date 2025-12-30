@@ -18,14 +18,18 @@
     "*://www.doubao.com/*",
     "*://doubao.com/*",
     "*://chat.deepseek.com/*",
-    "*://www.deepseek.com/*"
+    "*://www.deepseek.com/*",
+    "*://api.openai.com/*",
+    "*://generativelanguage.googleapis.com/*",
+    "*://api.modelscope.cn/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "AI 阅卷助手"
   },
   "background": {
-    "service_worker": "background/service-worker.js"
+    "service_worker": "background/service-worker.js",
+    "type": "module"
   },
   "content_scripts": [
     {

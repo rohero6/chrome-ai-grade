@@ -60,6 +60,46 @@ ${cfg.gradingRules || '请根据答案匹配度酌情给分。'}
     return `阅卷任务：${cfg.subject}${cfg.questionType}，满分${cfg.totalScore}分。答案要点：${keyPoints}。请根据图片中学生答案打分，只返回分数数字。`;
   }
 
+  // 构建 API 模式 Prompt（强制返回 JSON 格式）
+  buildForAPI() {
+    const cfg = this.config;
+    
+    // 1. 构建答案采分点部分
+    let answersSection = this._buildAnswersSection(cfg.answers);
+    
+    // 2. 构建完整 Prompt，强制 JSON 格式返回
+    const prompt = `
+我需要你扮演一位专业的阅卷老师。
+
+【基本信息】
+- 科目：${cfg.subject || '通用'}
+- 题型：${cfg.questionType || '通用'}
+- 本题满分：${cfg.totalScore || 10}分
+
+【参考答案与采分点】
+${answersSection}
+
+【评分规则】
+${cfg.gradingRules || '请根据答案匹配度酌情给分。'}
+
+【任务要求】
+请根据学生作答图片（已上传），结合上述采分点和关键词进行评分。
+
+**重要提示**：
+1. 仔细分析学生答案与标准答案的匹配程度
+2. 按照采分点逐项评分
+3. **必须严格按照以下 JSON 格式返回结果，不要输出任何其他文字**：
+
+{
+  "score": 分数数字（整数，0-${cfg.totalScore || 10}之间）
+}
+
+示例：如果评分为 4 分，则只返回：{"score": 4}
+`.trim();
+
+    return prompt;
+  }
+
   // 构建答案部分
   _buildAnswersSection(answers) {
     if (!answers || answers.length === 0) {
@@ -80,6 +120,10 @@ ${cfg.gradingRules || '请根据答案匹配度酌情给分。'}
 
   static createCompact(config) {
     return new PromptBuilder(config).buildCompact();
+  }
+
+  static createForAPI(config) {
+    return new PromptBuilder(config).buildForAPI();
   }
 }
 

@@ -235,6 +235,55 @@
           border-radius: 6px;
           min-height: 32px;
         }
+        #ai-grading-panel .log-container {
+          margin-top: 12px;
+          max-height: 200px;
+          overflow-y: auto;
+          background: rgba(0,0,0,0.3);
+          border-radius: 6px;
+          padding: 8px;
+          font-size: 11px;
+          font-family: 'Courier New', monospace;
+          display: none;
+        }
+        #ai-grading-panel .log-container.show {
+          display: block;
+        }
+        #ai-grading-panel .log-item {
+          margin: 4px 0;
+          padding: 4px;
+          border-left: 2px solid transparent;
+          word-break: break-all;
+        }
+        #ai-grading-panel .log-item.info {
+          color: #87ceeb;
+          border-left-color: #87ceeb;
+        }
+        #ai-grading-panel .log-item.success {
+          color: #90ee90;
+          border-left-color: #90ee90;
+        }
+        #ai-grading-panel .log-item.error {
+          color: #ff6b6b;
+          border-left-color: #ff6b6b;
+        }
+        #ai-grading-panel .log-item.warn {
+          color: #ffd700;
+          border-left-color: #ffd700;
+        }
+        #ai-grading-panel .log-toggle {
+          margin-top: 8px;
+          font-size: 10px;
+          color: rgba(255,255,255,0.7);
+          cursor: pointer;
+          text-align: center;
+          padding: 4px;
+          border-radius: 4px;
+          background: rgba(255,255,255,0.1);
+        }
+        #ai-grading-panel .log-toggle:hover {
+          background: rgba(255,255,255,0.2);
+        }
         #ai-grading-panel .drag-hint {
           font-size: 10px;
           opacity: 0.6;
@@ -256,6 +305,8 @@
         </label>
         <button class="start-btn" id="ai-start-btn">▶ 开始判分</button>
         <div class="status" id="ai-status">就绪</div>
+        <div class="log-toggle" id="ai-log-toggle">📋 显示日志</div>
+        <div class="log-container" id="ai-log-container"></div>
         <div class="drag-hint">↔ 拖动标题栏移动位置</div>
       </div>
     `;
@@ -322,6 +373,36 @@
       btn.title = panel.classList.contains('collapsed') ? '展开' : '收起';
     };
 
+    // 日志功能
+    const logContainer = document.getElementById('ai-log-container');
+    const logToggle = document.getElementById('ai-log-toggle');
+    let logShow = false;
+
+    window.addLog = function(message, type = 'info') {
+      if (!logContainer) return;
+      const logItem = document.createElement('div');
+      logItem.className = `log-item ${type}`;
+      const time = new Date().toLocaleTimeString();
+      logItem.textContent = `[${time}] ${message}`;
+      logContainer.appendChild(logItem);
+      logContainer.scrollTop = logContainer.scrollHeight;
+      
+      // 同时输出到控制台
+      const consoleMethod = type === 'error' ? 'error' : type === 'warn' ? 'warn' : 'log';
+      console[consoleMethod](`[AI阅卷日志] ${message}`);
+    };
+
+    logToggle.addEventListener('click', () => {
+      logShow = !logShow;
+      if (logShow) {
+        logContainer.classList.add('show');
+        logToggle.textContent = '📋 隐藏日志';
+      } else {
+        logContainer.classList.remove('show');
+        logToggle.textContent = '📋 显示日志';
+      }
+    });
+
     document.getElementById('ai-start-btn').onclick = () => startGrading();
     document.getElementById('ai-auto-check').onchange = (e) => {
       config.autoGrading = e.target.checked;
@@ -334,6 +415,11 @@
     if (!el) return;
     const icons = { info: 'ℹ️', success: '✅', error: '❌', loading: '⏳' };
     el.innerText = `${icons[type] || ''} ${text}`;
+    
+    // 同时记录到日志
+    if (typeof window.addLog === 'function') {
+      window.addLog(text, type);
+    }
   }
 
   // 开始阅卷
@@ -360,13 +446,21 @@
 
     config.isGrading = true;
     updateStatus('正在切换到 AI...', 'loading');
+    
+    if (typeof window.addLog === 'function') {
+      window.addLog(`开始阅卷，找到 ${imageUrls.length} 张图片`, 'info');
+    }
 
     // 禁用按钮
     const btn = document.getElementById('ai-start-btn');
     if (btn) btn.disabled = true;
 
     // 获取保存的配置
-    chrome.storage.local.get(['gradingConfig', 'selectedAIPlatform'], (result) => {
+    chrome.storage.local.get(['gradingConfig', 'selectedAIPlatform', 'selectedMode'], (result) => {
+      const mode = result.selectedMode || 'web';
+      if (typeof window.addLog === 'function') {
+        window.addLog(`当前模式: ${mode === 'api' ? 'API 模式' : '网页模式'}`, 'info');
+      }
       // 如果用户还没配置过，给个默认空对象（与旧版本一致）
       const gradingConfig = result.gradingConfig || {
         subject: '通用',
@@ -377,6 +471,15 @@
       };
 
       // 发送请求到 background（使用与旧版本一致的消息类型）
+      if (typeof window.addLog === 'function') {
+        window.addLog(`发送请求到后台，图片数量: ${imageUrls.length}`, 'info');
+        if (mode === 'api') {
+          window.addLog(`API 平台: ${result.selectedAPIPlatform || '未设置'}`, 'info');
+        } else {
+          window.addLog(`AI 平台: ${result.selectedAIPlatform || 'kimi'}`, 'info');
+        }
+      }
+      
       chrome.runtime.sendMessage({
         type: 'DOWNLOAD_AND_GRADE_REQUEST',
         imageUrls: imageUrls,
@@ -389,17 +492,53 @@
 
   // 处理阅卷结果
   function handleGradeResult(result) {
-    console.log('[AI阅卷] 收到评分结果:', result.score);
-    updateStatus(`AI 评分: ${result.score}分`, 'success');
+    console.log('[AI阅卷] 收到评分结果:', result);
+    
+    // 详细日志
+    if (typeof window.addLog === 'function') {
+      window.addLog(`收到 API 返回结果`, 'info');
+      window.addLog(`原始内容: ${result.details?.substring(0, 200) || '无'}`, 'info');
+      window.addLog(`解析的分数: ${result.score}`, result.score === '?' ? 'warn' : 'success');
+    }
+    
+    updateStatus(`AI 评分: ${result.score}分`, result.score === '?' ? 'warn' : 'success');
 
     // 启用按钮
     const btn = document.getElementById('ai-start-btn');
     if (btn) btn.disabled = false;
 
+    // 检查分数是否有效（注意：0 可能是有效分数）
+    if (!result.score || result.score === '?') {
+      if (typeof window.addLog === 'function') {
+        window.addLog(`警告: 分数解析失败`, 'error');
+        window.addLog(`完整原始响应: ${result.details || '无'}`, 'error');
+      }
+      updateStatus('分数解析失败，请检查 API 返回', 'error');
+      config.isGrading = false;
+      return;
+    }
+    
+    // 记录分数（包括 0）
+    if (typeof window.addLog === 'function') {
+      window.addLog(`分数: ${result.score} (${result.score === '0' ? '注意：分数为0，可能是有效评分' : '有效'})`, 
+        result.score === '0' ? 'warn' : 'success');
+    }
+
     // 在点击评分前保存当前图片地址（用于判断是否已跳转到下一题）
     const oldImages = JSON.stringify(currentAdapter.getAnswerImageUrls());
     
+    if (typeof window.addLog === 'function') {
+      window.addLog(`尝试填入分数: ${result.score}`, 'info');
+    }
+    
     const success = currentAdapter.fillScore(result.score);
+    
+    if (typeof window.addLog === 'function') {
+      window.addLog(`填入分数${success ? '成功' : '失败'}`, success ? 'success' : 'error');
+      if (!success) {
+        window.addLog(`提示: 请检查页面是否有分数输入框或按钮`, 'warn');
+      }
+    }
 
     if (config.autoGrading && success) {
       updateStatus('等待自动跳转到下一题...', 'loading');
@@ -413,6 +552,9 @@
 
   // 处理错误
   function handleError(message) {
+    if (typeof window.addLog === 'function') {
+      window.addLog(`错误: ${message}`, 'error');
+    }
     updateStatus(message, 'error');
     config.isGrading = false;
     config.autoGrading = false;

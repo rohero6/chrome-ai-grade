@@ -1,6 +1,10 @@
 // background/service-worker.js
 // 后台服务 - 协调改卷网站和 AI 平台之间的通信
 
+// 静态导入 API 适配器（Service Worker 不支持动态 import）
+import { getAdapterByName } from '../adapters/api-platforms/index.js';
+import PromptBuilder from '../core/prompt-builder.js';
+
 console.log('[AI阅卷] Background Service Worker 启动');
 
 // 状态管理
@@ -41,7 +45,7 @@ async function findAITab(platformName) {
   return tabs.length > 0 ? tabs[0] : null;
 }
 
-// 切换到 AI 平台并执行任务（与旧版本逻辑一致）
+// 切换到 AI 平台并执行任务（网页模式）
 async function switchToAIAndExecute(imagesBase64, config, platformName) {
   const aiTab = await findAITab(platformName);
   
@@ -65,17 +69,42 @@ async function switchToAIAndExecute(imagesBase64, config, platformName) {
   });
 }
 
+// 调用 API 并执行任务（API 模式）
+async function callAPIAndExecute(imagesBase64, config, apiPlatformName, apiConfig) {
+  console.log(`[Background] 使用 API 模式调用 ${apiPlatformName}...`);
+  
+  // 获取对应的 API 适配器（使用静态导入的函数）
+  const AdapterClass = getAdapterByName(apiPlatformName);
+  if (!AdapterClass) {
+    throw new Error(`未找到 ${apiPlatformName} API 适配器`);
+  }
+  
+  const adapter = new AdapterClass();
+  
+  // 构建 Prompt（使用 API 专用方法）
+  const prompt = PromptBuilder.createForAPI(config);
+  
+  // 调用 API
+  const result = await adapter.executeTask(imagesBase64, prompt, apiConfig);
+  
+  return result;
+}
+
 // 消息监听（使用与旧版本一致的消息类型）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
-  // 1. 改卷页面发起请求 -> 切去 AI（与旧版本消息类型一致）
+  // 1. 改卷页面发起请求 -> 切去 AI 或调用 API
   if (request.type === 'DOWNLOAD_AND_GRADE_REQUEST') {
-    console.log('[Background] 收到改卷请求，准备下载并切到 AI...');
+    console.log('[Background] 收到改卷请求...');
     gradingTabId = sender.tab.id; // 【关键】记下改卷页面 ID
     
-    // 并发下载所有图片
-    Promise.all(request.imageUrls.map(url => fetchImageAndConvertToBase64(url)))
-      .then(base64List => {
+    // 获取模式配置
+    chrome.storage.local.get(['selectedMode', 'selectedAPIPlatform', 'apiConfig'], async (storage) => {
+      const mode = storage.selectedMode || 'web';
+      
+      // 并发下载所有图片
+      try {
+        const base64List = await Promise.all(request.imageUrls.map(url => fetchImageAndConvertToBase64(url)));
         const validImages = base64List.filter(img => img !== null);
         
         if (validImages.length === 0) {
@@ -86,25 +115,61 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           return;
         }
         
-        console.log(`[Background] 下载完成 ${validImages.length} 张图片，切换到 AI...`);
+        console.log(`[Background] 下载完成 ${validImages.length} 张图片，模式: ${mode}`);
         
-        // 切换到 AI 并执行任务
-        switchToAIAndExecute(validImages, request.config, request.aiPlatform || 'kimi')
-          .catch(err => {
+        if (mode === 'api') {
+          // API 模式：直接调用 API
+          const apiPlatform = storage.selectedAPIPlatform || 'openai';
+          const apiConfig = storage.apiConfig || {};
+          
+          if (!apiConfig.apiKey) {
             chrome.tabs.sendMessage(gradingTabId, {
               type: 'ERROR',
-              message: err.message
+              message: '请先在配置中设置 API Key'
             });
-            // 切回改卷页面
-            chrome.tabs.update(gradingTabId, { active: true });
-          });
-      })
-      .catch(err => {
+            return;
+          }
+          
+          try {
+            console.log(`[Background] API 模式调用 ${apiPlatform}，图片数量: ${validImages.length}`);
+            console.log(`[Background] API 配置:`, { model: apiConfig.model || '默认', hasApiKey: !!apiConfig.apiKey });
+            
+            const result = await callAPIAndExecute(validImages, request.config, apiPlatform, apiConfig);
+            
+            console.log(`[Background] API 返回结果:`, { score: result.score, detailsLength: result.details?.length });
+            
+            // 直接返回结果到改卷页面
+            chrome.tabs.sendMessage(gradingTabId, {
+              type: 'GRADE_RESULT',
+              score: result.score,
+              details: result.details
+            });
+          } catch (err) {
+            console.error('[Background] API 调用失败:', err);
+            chrome.tabs.sendMessage(gradingTabId, {
+              type: 'ERROR',
+              message: err.message || 'API 调用失败'
+            });
+          }
+        } else {
+          // 网页模式：切换到 AI 平台
+          switchToAIAndExecute(validImages, request.config, request.aiPlatform || 'kimi')
+            .catch(err => {
+              chrome.tabs.sendMessage(gradingTabId, {
+                type: 'ERROR',
+                message: err.message
+              });
+              // 切回改卷页面
+              chrome.tabs.update(gradingTabId, { active: true });
+            });
+        }
+      } catch (err) {
         chrome.tabs.sendMessage(gradingTabId, {
           type: 'ERROR',
           message: '处理图片时出错: ' + err.message
         });
-      });
+      }
+    });
   }
   
   // 2. AI 完成任务 -> 切回改卷页（与旧版本消息类型一致）
