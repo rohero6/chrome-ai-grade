@@ -396,12 +396,15 @@
     const btn = document.getElementById('ai-start-btn');
     if (btn) btn.disabled = false;
 
+    // 在点击评分前保存当前图片地址（用于判断是否已跳转到下一题）
+    const oldImages = JSON.stringify(currentAdapter.getAnswerImageUrls());
+    
     const success = currentAdapter.fillScore(result.score);
 
     if (config.autoGrading && success) {
-      updateStatus('3秒后进入下一题...', 'loading');
+      updateStatus('等待自动跳转到下一题...', 'loading');
       setTimeout(() => {
-        goToNextAndContinue();
+        waitForNextQuestion(oldImages);
       }, 3000);
     } else {
       config.isGrading = false;
@@ -421,17 +424,16 @@
     if (btn) btn.disabled = false;
   }
 
-  // 跳转下一题并继续
-  function goToNextAndContinue() {
-    const oldImages = JSON.stringify(currentAdapter.getAnswerImageUrls());
-    currentAdapter.goToNext();
-    updateStatus('加载下一题...', 'loading');
+  // 等待自动跳转到下一题（通过对比图片地址变化判断）
+  function waitForNextQuestion(oldImages) {
+    updateStatus('检测下一题...', 'loading');
 
     let checks = 0;
     const interval = setInterval(() => {
       checks++;
       const newImages = currentAdapter.getAnswerImageUrls();
       
+      // 对比图片地址，如果不同说明已跳转到下一题
       if (newImages.length > 0 && JSON.stringify(newImages) !== oldImages) {
         clearInterval(interval);
         config.isGrading = false;
@@ -441,7 +443,7 @@
       if (checks > 20) {
         clearInterval(interval);
         config.isGrading = false;
-        updateStatus('翻页超时', 'error');
+        updateStatus('跳转超时', 'error');
         
         const btn = document.getElementById('ai-start-btn');
         if (btn) btn.disabled = false;
