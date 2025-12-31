@@ -51,7 +51,9 @@ const API_MODELS = {
     { value: 'glm-4v-flash', label: 'GLM-4V Flash (推荐，免费)' },
     { value: 'glm-4v-plus-0111', label: 'GLM-4V Plus' },
     { value: 'glm-4', label: 'GLM-4 (纯文本)' },
-    { value: 'glm-4-flash', label: 'GLM-4 Flash' }
+    { value: 'glm-4-flash', label: 'GLM-4 Flash' },
+    { value: 'glm-4.6v-flash', label: 'glm-4.6v-flash' },
+    { value: 'glm-4.6v', label: 'glm-4.6v' }
   ]
 };
 

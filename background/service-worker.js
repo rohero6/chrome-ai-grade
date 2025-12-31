@@ -84,14 +84,7 @@ async function callAPIAndExecute(imagesBase64, config, apiPlatformName, apiConfi
   // 构建 Prompt（使用 API 专用方法）
   const prompt = PromptBuilder.createForAPI(config);
   
-  // 智谱AI特殊处理：使用原始URL而不是base64
-  if (apiPlatformName === 'zhipu' && imageUrls && imageUrls.length > 0) {
-    console.log('[Background] 智谱AI使用原始图片URL');
-    const result = await adapter.executeTaskWithUrls(imageUrls, prompt, apiConfig);
-    return result;
-  }
-  
-  // 调用 API（其他平台使用base64）
+  // 调用 API（所有平台都使用base64）
   const result = await adapter.executeTask(imagesBase64, prompt, apiConfig);
   
   return result;

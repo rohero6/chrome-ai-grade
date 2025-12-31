@@ -13,13 +13,13 @@ class ZhipuAdapter extends APIPlatformAdapter {
   }
 
   /**
-   * 构建 API 请求体（使用图片URL）
+   * 构建 API 请求体（使用base64，智谱AI需要纯base64字符串）
    */
-  buildRequestBodyWithUrls(imageUrls, prompt, config) {
+  buildRequestBody(base64Images, prompt, config) {
     const model = config.model || 'glm-4v-flash';
     
-    // 如果有图片，使用多模态格式（按照官方示例）
-    if (imageUrls && imageUrls.length > 0) {
+    // 如果有图片，使用多模态格式
+    if (base64Images && base64Images.length > 0) {
       const content = [];
       
       // 先添加文本提示词
@@ -28,25 +28,23 @@ class ZhipuAdapter extends APIPlatformAdapter {
         text: prompt
       });
       
-      // 然后添加图片URL
-      imageUrls.forEach(url => {
-        // 确保URL是完整的HTTP/HTTPS URL
-        let imageUrl = url;
-        if (url.startsWith('//')) {
-          imageUrl = 'https:' + url;
-        } else if (!url.startsWith('http')) {
-          imageUrl = 'https://' + url;
+      // 然后添加图片（智谱AI需要纯base64，不要data URL前缀）
+      base64Images.forEach(base64 => {
+        // 提取纯base64字符串（去掉 data:image/xxx;base64, 前缀）
+        let pureBase64 = base64;
+        if (base64.includes(',')) {
+          pureBase64 = base64.split(',')[1];
         }
         
         content.push({
           type: 'image_url',
           image_url: {
-            url: imageUrl
+            url: pureBase64  // 智谱AI直接使用纯Base64字符串
           }
         });
       });
       
-      return {
+      const requestBody = {
         model: model,
         messages: [
           {
@@ -55,8 +53,13 @@ class ZhipuAdapter extends APIPlatformAdapter {
           }
         ],
         temperature: config.temperature || 0.3,
-        max_tokens: config.maxTokens || 2000
+        max_tokens: config.maxTokens || 2000,
+        thinking: {
+          type: 'enabled'  // 开启思考模式
+        }
       };
+      
+      return requestBody;
     } else {
       // 纯文本消息
       return {
@@ -68,118 +71,16 @@ class ZhipuAdapter extends APIPlatformAdapter {
           }
         ],
         temperature: config.temperature || 0.3,
-        max_tokens: config.maxTokens || 2000
+        max_tokens: config.maxTokens || 2000,
+        thinking: {
+          type: 'enabled'  // 开启思考模式
+        }
       };
     }
   }
 
   /**
-   * 构建 API 请求体（使用base64，保留兼容性）
-   */
-  buildRequestBody(base64Images, prompt, config) {
-    // 如果传入的是base64，尝试转换为URL（但通常应该用URL）
-    return this.buildRequestBodyWithUrls([], prompt, config);
-  }
-  
-  /**
-   * 使用URL调用API（智谱AI专用）
-   */
-  async callAPIWithUrls(imageUrls, prompt, config) {
-    const requestBody = this.buildRequestBodyWithUrls(imageUrls, prompt, config);
-    
-    console.log('[zhipu] 请求体（使用URL）:', JSON.stringify(requestBody, null, 2));
-    
-    const response = await fetch(this.apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[zhipu] API 错误响应:', errorText);
-      let error;
-      try {
-        error = JSON.parse(errorText);
-      } catch (e) {
-        error = { error: { message: errorText || '请求失败' } };
-      }
-      throw new Error(`智谱AI API 错误: ${error.error?.message || response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('[zhipu] API 完整响应:', JSON.stringify(data, null, 2));
-    
-    // 智谱AI的响应格式：data.choices[0].message.content
-    let content = '';
-    
-    // 处理不同的响应格式
-    if (data.choices && data.choices.length > 0) {
-      const message = data.choices[0].message;
-      if (message) {
-        // 可能是字符串或数组
-        if (typeof message.content === 'string') {
-          content = message.content;
-        } else if (Array.isArray(message.content)) {
-          // 如果是数组，提取文本部分
-          content = message.content
-            .filter(item => item.type === 'text')
-            .map(item => item.text || item.content || '')
-            .join('\n');
-        }
-      }
-    }
-    
-    // 如果没有找到内容，尝试其他字段
-    if (!content) {
-      content = data.content || data.text || JSON.stringify(data);
-    }
-    
-    console.log('[zhipu] 提取的内容:', content);
-    
-    return {
-      content: content,
-      raw: data
-    };
-  }
-  
-  /**
-   * 使用URL执行任务（智谱AI专用）
-   */
-  async executeTaskWithUrls(imageUrls, prompt, apiConfig) {
-    console.log(`[${this.name}] 开始执行 API 任务（使用URL）...`);
-    console.log(`[${this.name}] 图片URL数量: ${imageUrls?.length || 0}`);
-    console.log(`[${this.name}] Prompt 长度: ${prompt?.length || 0}`);
-    
-    // 验证配置
-    this.validateConfig(apiConfig);
-    
-    // 调用 API
-    console.log(`[${this.name}] 正在调用 API...`);
-    const response = await this.callAPIWithUrls(imageUrls, prompt, apiConfig);
-    
-    const rawContent = response.content || response.text || JSON.stringify(response);
-    console.log(`[${this.name}] API 返回原始内容:`, rawContent.substring(0, 500));
-    
-    // 解析分数
-    const score = this.parseScoreFromResponse(response);
-    console.log(`[${this.name}] 解析得分: ${score}`);
-    
-    if (!score || score === '?') {
-      console.warn(`[${this.name}] 分数解析失败，原始内容:`, rawContent);
-    }
-    
-    return {
-      score: score || '?',
-      details: rawContent
-    };
-  }
-
-  /**
-   * 调用智谱AI API
+   * 调用智谱AI API（使用base64）
    */
   async callAPI(base64Images, prompt, config) {
     const requestBody = this.buildRequestBody(base64Images, prompt, config);
