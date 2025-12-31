@@ -70,7 +70,7 @@ async function switchToAIAndExecute(imagesBase64, config, platformName) {
 }
 
 // 调用 API 并执行任务（API 模式）
-async function callAPIAndExecute(imagesBase64, config, apiPlatformName, apiConfig) {
+async function callAPIAndExecute(imagesBase64, config, apiPlatformName, apiConfig, imageUrls = null) {
   console.log(`[Background] 使用 API 模式调用 ${apiPlatformName}...`);
   
   // 获取对应的 API 适配器（使用静态导入的函数）
@@ -84,7 +84,14 @@ async function callAPIAndExecute(imagesBase64, config, apiPlatformName, apiConfi
   // 构建 Prompt（使用 API 专用方法）
   const prompt = PromptBuilder.createForAPI(config);
   
-  // 调用 API
+  // 智谱AI特殊处理：使用原始URL而不是base64
+  if (apiPlatformName === 'zhipu' && imageUrls && imageUrls.length > 0) {
+    console.log('[Background] 智谱AI使用原始图片URL');
+    const result = await adapter.executeTaskWithUrls(imageUrls, prompt, apiConfig);
+    return result;
+  }
+  
+  // 调用 API（其他平台使用base64）
   const result = await adapter.executeTask(imagesBase64, prompt, apiConfig);
   
   return result;
@@ -99,7 +106,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     gradingTabId = sender.tab.id; // 【关键】记下改卷页面 ID
     
     // 获取模式配置
-    chrome.storage.local.get(['selectedMode', 'selectedAPIPlatform', 'apiConfig'], async (storage) => {
+    chrome.storage.local.get(['selectedMode', 'selectedAPIPlatform', 'apiConfigs'], async (storage) => {
       const mode = storage.selectedMode || 'web';
       
       // 并发下载所有图片
@@ -120,12 +127,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (mode === 'api') {
           // API 模式：直接调用 API
           const apiPlatform = storage.selectedAPIPlatform || 'openai';
-          const apiConfig = storage.apiConfig || {};
+          const apiConfigs = storage.apiConfigs || {};
+          const apiConfig = apiConfigs[apiPlatform] || {};  // 按平台获取配置
           
           if (!apiConfig.apiKey) {
             chrome.tabs.sendMessage(gradingTabId, {
               type: 'ERROR',
-              message: '请先在配置中设置 API Key'
+              message: `请先在配置中设置 ${apiPlatform} 的 API Key`
             });
             return;
           }
@@ -134,7 +142,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log(`[Background] API 模式调用 ${apiPlatform}，图片数量: ${validImages.length}`);
             console.log(`[Background] API 配置:`, { model: apiConfig.model || '默认', hasApiKey: !!apiConfig.apiKey });
             
-            const result = await callAPIAndExecute(validImages, request.config, apiPlatform, apiConfig);
+            // 传递原始图片URL（用于智谱AI等需要URL的平台）
+            const result = await callAPIAndExecute(validImages, request.config, apiPlatform, apiConfig, request.imageUrls);
             
             console.log(`[Background] API 返回结果:`, { score: result.score, detailsLength: result.details?.length });
             

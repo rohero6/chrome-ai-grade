@@ -21,7 +21,9 @@
     "*://www.deepseek.com/*",
     "*://api.openai.com/*",
     "*://generativelanguage.googleapis.com/*",
-    "*://api.modelscope.cn/*"
+    "*://api.modelscope.cn/*",
+    "*://dashscope.aliyuncs.com/*",
+    "*://open.bigmodel.cn/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",

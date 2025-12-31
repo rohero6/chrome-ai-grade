@@ -4,12 +4,14 @@
 import OpenAIAdapter from './openai.js';
 import GeminiAdapter from './gemini.js';
 import ModelScopeAdapter from './modelscope.js';
+import ZhipuAdapter from './zhipu.js';
 
 // 所有可用的 API 平台适配器
 const apiPlatformAdapters = [
   OpenAIAdapter,
   GeminiAdapter,
-  ModelScopeAdapter
+  ModelScopeAdapter,
+  ZhipuAdapter
 ];
 
 // 根据名称获取适配器类

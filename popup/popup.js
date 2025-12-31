@@ -43,8 +43,15 @@ const API_MODELS = {
   modelscope: [
     { value: 'qwen-vl-max', label: 'Qwen-VL-Max (推荐)' },
     { value: 'qwen-vl-plus', label: 'Qwen-VL-Plus' },
+    { value: 'Qwen/Qwen3-VL-235B-A22B-Instruct', label: 'Qwen3-VL-235B-A22B-Instruct' },
     { value: 'qwen-vl', label: 'Qwen-VL' },
     { value: 'qwen-turbo', label: 'Qwen Turbo' }
+  ],
+  zhipu: [
+    { value: 'glm-4v-flash', label: 'GLM-4V Flash (推荐，免费)' },
+    { value: 'glm-4v-plus-0111', label: 'GLM-4V Plus' },
+    { value: 'glm-4', label: 'GLM-4 (纯文本)' },
+    { value: 'glm-4-flash', label: 'GLM-4 Flash' }
   ]
 };
 
@@ -158,12 +165,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const cards = apiPlatformSelector.querySelectorAll('.api-platform-card');
     
     cards.forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         cards.forEach(c => c.classList.remove('active'));
         card.classList.add('active');
-        selectedAPIPlatform = card.dataset.apiPlatform;
-        // 切换平台时更新模型列表
+        const newPlatform = card.dataset.apiPlatform;
+        
+        // 保存当前平台的配置
+        await saveCurrentAPIConfig();
+        
+        // 切换到新平台
+        selectedAPIPlatform = newPlatform;
         updateModelList(selectedAPIPlatform);
+        
+        // 加载新平台的配置
+        await loadAPIConfig(newPlatform);
       });
     });
   }
@@ -180,6 +195,46 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedAPIPlatform = platform;
     // 更新模型列表
     updateModelList(platform);
+  }
+  
+  // 保存当前平台的API配置
+  async function saveCurrentAPIConfig() {
+    if (!selectedAPIPlatform) return;
+    
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['apiConfigs'], (result) => {
+        const apiConfigs = result.apiConfigs || {};
+        apiConfigs[selectedAPIPlatform] = {
+          apiKey: apiKeyInput.value,
+          model: apiModelInput.value || undefined
+        };
+        chrome.storage.local.set({ apiConfigs }, resolve);
+      });
+    });
+  }
+  
+  // 加载指定平台的API配置
+  async function loadAPIConfig(platform) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['apiConfigs'], (result) => {
+        const apiConfigs = result.apiConfigs || {};
+        const config = apiConfigs[platform] || {};
+        
+        // 恢复API Key
+        apiKeyInput.value = config.apiKey || '';
+        
+        // 恢复模型（需要先更新模型列表）
+        if (config.model) {
+          setTimeout(() => {
+            apiModelInput.value = config.model;
+          }, 0);
+        } else {
+          apiModelInput.value = '';
+        }
+        
+        resolve();
+      });
+    });
   }
 
   // --- AI 平台选择（网页模式） ---
@@ -255,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
       'selectedAIPlatform', 
       'selectedMode',
       'selectedAPIPlatform',
-      'apiConfig'
+      'apiConfigs'  // 改为 apiConfigs（按平台存储）
     ], (result) => {
       const config = result.gradingConfig || {};
 
@@ -270,18 +325,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const apiPlatform = result.selectedAPIPlatform || 'openai';
       setActiveAPIPlatform(apiPlatform);
 
-      // 恢复 API 配置
-      if (result.apiConfig) {
-        if (result.apiConfig.apiKey) {
-          apiKeyInput.value = result.apiConfig.apiKey;
-        }
-        if (result.apiConfig.model) {
-          // 设置模型值（在更新模型列表之后）
-          setTimeout(() => {
-            apiModelInput.value = result.apiConfig.model;
-          }, 0);
-        }
-      }
+      // 恢复 API 配置（按平台加载）
+      loadAPIConfig(apiPlatform);
 
       // 恢复 AI 平台选择（网页模式）
       if (result.selectedAIPlatform) {
@@ -310,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 保存逻辑
-  saveBtn.addEventListener('click', () => {
+  saveBtn.addEventListener('click', async () => {
     const answers = [];
     document.querySelectorAll('.answer-card').forEach(card => {
       answers.push({
@@ -328,25 +373,31 @@ document.addEventListener('DOMContentLoaded', () => {
       answers: answers
     };
 
-    const saveData = {
-      gradingConfig: config,
-      selectedAIPlatform: selectedPlatform,
-      selectedMode: selectedMode,
-      selectedAPIPlatform: selectedAPIPlatform
-    };
-
-    // 如果是 API 模式，保存 API 配置
-    if (selectedMode === 'api') {
-      saveData.apiConfig = {
-        apiKey: apiKeyInput.value,
-        model: apiModelInput.value || undefined
+    // 先获取现有的 apiConfigs
+    chrome.storage.local.get(['apiConfigs'], (result) => {
+      const apiConfigs = result.apiConfigs || {};
+      
+      const saveData = {
+        gradingConfig: config,
+        selectedAIPlatform: selectedPlatform,
+        selectedMode: selectedMode,
+        selectedAPIPlatform: selectedAPIPlatform
       };
-    }
 
-    chrome.storage.local.set(saveData, () => {
-      const status = document.getElementById('status');
-      status.style.display = 'block';
-      setTimeout(() => status.style.display = 'none', 2000);
+      // 如果是 API 模式，按平台保存 API 配置
+      if (selectedMode === 'api' && selectedAPIPlatform) {
+        apiConfigs[selectedAPIPlatform] = {
+          apiKey: apiKeyInput.value,
+          model: apiModelInput.value || undefined
+        };
+        saveData.apiConfigs = apiConfigs;
+      }
+
+      chrome.storage.local.set(saveData, () => {
+        const status = document.getElementById('status');
+        status.style.display = 'block';
+        setTimeout(() => status.style.display = 'none', 2000);
+      });
     });
   });
 
