@@ -5,6 +5,96 @@
   'use strict';
   
   console.log('[AI阅卷] 改卷网站加载器启动...');
+  
+  // 注入页面脚本（在页面上下文中执行，绕过 CSP）
+  function injectPageScript() {
+    if (window.__aiGradingPageScriptInjected) {
+      console.log('[AI阅卷] 页面脚本已注入，跳过');
+      // 即使标记已注入，也检查一下函数是否存在
+      setTimeout(() => {
+        const exists = typeof window.__aiGradingExtractZeroScore !== 'undefined';
+        console.log('[AI阅卷] 检查页面函数是否存在:', exists);
+        if (!exists) {
+          console.log('[AI阅卷] ⚠️ 函数不存在，重新注入...');
+          window.__aiGradingPageScriptInjected = false;
+          injectPageScript();
+        }
+      }, 100);
+      return;
+    }
+    
+    console.log('[AI阅卷] 开始注入页面脚本...');
+    console.log('[AI阅卷] chrome.runtime:', typeof chrome !== 'undefined' && chrome.runtime);
+    
+    try {
+      const scriptUrl = chrome.runtime.getURL('page-scripts/angular-extractor.js');
+      console.log('[AI阅卷] 脚本URL:', scriptUrl);
+      
+      const script = document.createElement('script');
+      script.src = scriptUrl;
+      script.onload = function() {
+        console.log('[AI阅卷] ✅ 页面脚本加载成功');
+        this.remove();
+        // 检查函数是否已注入（需要等待脚本执行）
+        setTimeout(() => {
+          const extractExists = typeof window.__aiGradingExtractZeroScore !== 'undefined';
+          const jumpExists = typeof window.__aiGradingJumpToTask !== 'undefined';
+          console.log('[AI阅卷] 检查页面函数:', {
+            extractZeroScore: extractExists,
+            jumpToTask: jumpExists
+          });
+          if (!extractExists) {
+            console.error('[AI阅卷] ❌ 页面函数未注入，可能脚本执行失败');
+          }
+        }, 200);
+      };
+      script.onerror = function(e) {
+        console.error('[AI阅卷] ❌ 页面脚本加载失败:', e);
+        console.error('[AI阅卷] 脚本URL:', scriptUrl);
+        console.error('[AI阅卷] 请检查 manifest.json 中的 web_accessible_resources 配置');
+      };
+      
+      (document.head || document.documentElement).appendChild(script);
+      window.__aiGradingPageScriptInjected = true;
+      console.log('[AI阅卷] 页面脚本标签已添加到DOM');
+    } catch (e) {
+      console.error('[AI阅卷] ❌ 注入页面脚本时出错:', e);
+    }
+  }
+  
+  // 立即尝试注入
+  console.log('[AI阅卷] 准备注入页面脚本，document.readyState:', document.readyState);
+  
+  // 如果页面已加载，立即注入
+  if (document.readyState === 'loading') {
+    console.log('[AI阅卷] 页面正在加载，等待 DOMContentLoaded...');
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('[AI阅卷] DOMContentLoaded 触发，注入页面脚本');
+      injectPageScript();
+    });
+  } else {
+    // 延迟注入，确保页面完全加载
+    console.log('[AI阅卷] 页面已加载，延迟注入页面脚本');
+    setTimeout(() => {
+      console.log('[AI阅卷] 执行延迟注入');
+      injectPageScript();
+    }, 200);
+  }
+  
+  // 也监听页面加载完成事件
+  window.addEventListener('load', () => {
+    console.log('[AI阅卷] 页面加载完成，检查页面脚本...');
+    if (typeof window.__aiGradingExtractZeroScore === 'undefined') {
+      console.log('[AI阅卷] ⚠️ 页面函数不存在，尝试重新注入...');
+      window.__aiGradingPageScriptInjected = false;
+      injectPageScript();
+    } else {
+      console.log('[AI阅卷] ✅ 页面函数已存在');
+    }
+  });
+  
+  // 在提取零分题时，如果函数不存在，强制注入
+  // 这个会在 extractZeroScoreList 函数中调用
 
   // 适配器映射（非模块环境使用内联定义）
   const adapters = {
@@ -69,6 +159,95 @@
           if (btn.innerText.includes('下一')) { btn.click(); return true; }
         }
         return false;
+      },
+      
+      // 零分题提取功能（通过页面脚本执行）
+      extractZeroScoreList(reviewHistory = {}) {
+        console.log('[内联适配器] 开始提取零分题');
+        console.log('[内联适配器] reviewHistory:', reviewHistory);
+        console.log('[内联适配器] window.__aiGradingExtractZeroScore 存在:', typeof window.__aiGradingExtractZeroScore !== 'undefined');
+        
+        return new Promise((resolve) => {
+          const requestId = 'zero_' + Date.now() + '_' + Math.random();
+          console.log('[内联适配器] requestId:', requestId);
+          
+          let resolved = false;
+          let timeoutId = null;
+          
+          // 监听页面返回的结果
+          const handler = (event) => {
+            console.log('[内联适配器] 收到事件:', event.type, event.detail);
+            if (event.detail && event.detail.type === 'ZERO_SCORE_RESULT' && event.detail.requestId === requestId) {
+              console.log('[内联适配器] ✅ 收到匹配的结果，零分题数量:', event.detail.list?.length || 0);
+              if (timeoutId) clearTimeout(timeoutId);
+              document.removeEventListener('aiGradingResult', handler);
+              resolved = true;
+              resolve(event.detail.list || []);
+            } else {
+              console.log('[内联适配器] ⚠️ 收到不匹配的事件:', event.detail?.requestId, '期望:', requestId);
+            }
+          };
+          document.addEventListener('aiGradingResult', handler);
+          console.log('[内联适配器] ✅ 已添加事件监听器');
+          
+          // 设置超时
+          timeoutId = setTimeout(() => {
+            if (!resolved) {
+              console.log('[内联适配器] ❌ 超时，未收到结果');
+              document.removeEventListener('aiGradingResult', handler);
+              resolve([]);
+            }
+          }, 5000);
+          
+          // 通过 DOM 事件触发页面脚本执行（不直接调用函数，因为隔离环境）
+          console.log('[内联适配器] 发送请求事件到页面...');
+          const requestEvent = new CustomEvent('aiGradingRequest', {
+            detail: {
+              type: 'extractZeroScore',
+              requestId: requestId,
+              reviewHistory: reviewHistory
+            }
+          });
+          document.dispatchEvent(requestEvent);
+          console.log('[内联适配器] ✅ 请求事件已发送');
+        });
+      },
+      
+      jumpToTask(idx, id) {
+        console.log('[内联适配器] 开始跳转，idx:', idx, 'id:', id);
+        
+        return new Promise((resolve) => {
+          const requestId = 'jump_' + Date.now() + '_' + Math.random();
+          
+          // 监听页面返回的结果
+          const handler = (event) => {
+            if (event.detail && event.detail.type === 'JUMP_RESULT' && event.detail.requestId === requestId) {
+              document.removeEventListener('aiGradingJumpResult', handler);
+              console.log('[内联适配器] ✅ 收到跳转结果:', event.detail.success);
+              resolve(event.detail.success === true);
+            }
+          };
+          document.addEventListener('aiGradingJumpResult', handler);
+          
+          // 设置超时
+          setTimeout(() => {
+            document.removeEventListener('aiGradingJumpResult', handler);
+            console.log('[内联适配器] ❌ 跳转超时');
+            resolve(false);
+          }, 3000);
+          
+          // 通过 DOM 事件触发页面脚本执行
+          const requestEvent = new CustomEvent('aiGradingJumpRequest', {
+            detail: {
+              type: 'jumpToTask',
+              requestId: requestId,
+              idx: idx,
+              id: id
+            }
+          });
+          document.dispatchEvent(requestEvent);
+          console.log('[内联适配器] ✅ 跳转请求事件已发送');
+        }).then(success => success).catch(() => false);
       }
     }
     // 添加更多适配器...
@@ -89,6 +268,12 @@
   // 当前使用的适配器
   let currentAdapter = null;
   let config = { isGrading: false, autoGrading: false };
+  
+  // 零分题相关状态
+  let zeroScoreList = [];
+  let reviewHistory = {};
+  let reviewIndex = 0;
+  let reviewing = false;
 
   // 注入控制面板
   function injectUI() {
@@ -290,6 +475,67 @@
           text-align: center;
           margin-top: 8px;
         }
+        #ai-grading-panel .zero-score-section {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        #ai-grading-panel .zero-score-btn {
+          width: 100%;
+          padding: 8px;
+          margin-top: 8px;
+          background: rgba(255,255,255,0.2);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        #ai-grading-panel .zero-score-btn:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        #ai-grading-panel .zero-score-list {
+          max-height: 150px;
+          overflow-y: auto;
+          margin-top: 8px;
+          background: rgba(0,0,0,0.2);
+          border-radius: 6px;
+          padding: 6px;
+          display: none;
+        }
+        #ai-grading-panel .zero-score-list.show {
+          display: block;
+        }
+        #ai-grading-panel .zero-score-item {
+          padding: 6px 8px;
+          margin: 4px 0;
+          background: rgba(255,255,255,0.1);
+          border-radius: 4px;
+          font-size: 11px;
+          cursor: pointer;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: background 0.2s;
+        }
+        #ai-grading-panel .zero-score-item:hover {
+          background: rgba(255,255,255,0.2);
+        }
+        #ai-grading-panel .zero-score-item-info {
+          flex: 1;
+        }
+        #ai-grading-panel .zero-score-item-count {
+          font-size: 10px;
+          opacity: 0.7;
+          margin-left: 8px;
+        }
+        #ai-grading-panel .zero-score-stats {
+          font-size: 11px;
+          opacity: 0.8;
+          margin-top: 6px;
+          text-align: center;
+        }
       </style>
       <div class="panel-header" id="ai-drag-handle">
         <span class="header-title">AI 阅卷助手 v4.0</span>
@@ -305,6 +551,11 @@
         </label>
         <button class="start-btn" id="ai-start-btn">▶ 开始判分</button>
         <div class="status" id="ai-status">就绪</div>
+        <div class="zero-score-section">
+          <button class="zero-score-btn" id="ai-zero-score-btn">📋 显示零分题列表</button>
+          <div class="zero-score-stats" id="ai-zero-score-stats"></div>
+          <div class="zero-score-list" id="ai-zero-score-list"></div>
+        </div>
         <div class="log-toggle" id="ai-log-toggle">📋 显示日志</div>
         <div class="log-container" id="ai-log-container"></div>
         <div class="drag-hint">↔ 拖动标题栏移动位置</div>
@@ -407,6 +658,151 @@
     document.getElementById('ai-auto-check').onchange = (e) => {
       config.autoGrading = e.target.checked;
     };
+
+    // 零分题列表功能
+    const zeroScoreBtn = document.getElementById('ai-zero-score-btn');
+    const zeroScoreListEl = document.getElementById('ai-zero-score-list');
+    const zeroScoreStats = document.getElementById('ai-zero-score-stats');
+    let zeroScoreListShow = false;
+
+    // 更新零分题列表显示
+    window.updateZeroScoreList = function(list) {
+      zeroScoreListEl.innerHTML = '';
+      
+      if (list.length === 0) {
+        zeroScoreListEl.innerHTML = '<div style="padding: 8px; text-align: center; opacity: 0.7;">暂无零分题</div>';
+        zeroScoreStats.textContent = '';
+        return;
+      }
+
+      zeroScoreStats.textContent = `共 ${list.length} 道零分题`;
+      
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'zero-score-item';
+        div.innerHTML = `
+          <div class="zero-score-item-info">
+            题号 ${item.index}
+            <span class="zero-score-item-count">回评 ${item.reviewCount} 次</span>
+          </div>
+        `;
+        div.addEventListener('click', () => {
+          jumpToTaskAndRecord(item.index, item.id);
+        });
+        zeroScoreListEl.appendChild(div);
+      });
+    };
+
+    // 提取零分题列表
+    function extractZeroScoreList() {
+      console.log('[extractZeroScoreList] 函数被调用');
+      console.log('[extractZeroScoreList] currentAdapter:', currentAdapter);
+      console.log('[extractZeroScoreList] currentAdapter.extractZeroScoreList:', typeof currentAdapter?.extractZeroScoreList);
+      
+      if (!currentAdapter || typeof currentAdapter.extractZeroScoreList !== 'function') {
+        console.log('[extractZeroScoreList] ❌ 适配器不支持零分题提取');
+        updateStatus('当前适配器不支持零分题提取', 'error');
+        if (typeof window.addLog === 'function') {
+          window.addLog('当前适配器不支持零分题提取功能', 'error');
+        }
+        return;
+      }
+
+      console.log('[extractZeroScoreList] ✅ 开始提取');
+      updateStatus('正在提取零分题...', 'loading');
+      
+      // 在页面上下文中执行（绕过 content script 隔离）
+      console.log('[extractZeroScoreList] 调用适配器方法...');
+      currentAdapter.extractZeroScoreList(reviewHistory).then(list => {
+        console.log('[extractZeroScoreList] ✅ 收到结果，数量:', list.length);
+        zeroScoreList = list; // 更新全局变量
+        window.updateZeroScoreList(list);
+        
+        if (typeof window.addLog === 'function') {
+          window.addLog(`提取完成，找到 ${list.length} 道零分题`, list.length > 0 ? 'success' : 'info');
+        }
+        
+        if (list.length > 0) {
+          zeroScoreListEl.classList.add('show');
+          zeroScoreBtn.textContent = '📋 隐藏零分题列表';
+          zeroScoreListShow = true;
+          updateStatus(`找到 ${list.length} 道零分题`, 'success');
+        } else {
+          zeroScoreListEl.classList.remove('show');
+          zeroScoreBtn.textContent = '📋 显示零分题列表';
+          zeroScoreListShow = false;
+          updateStatus('没有零分题', 'info');
+        }
+      }).catch(error => {
+        console.error('[AI阅卷] 提取零分题失败:', error);
+        updateStatus('提取零分题失败: ' + error.message, 'error');
+        if (typeof window.addLog === 'function') {
+          window.addLog(`错误详情: ${error.message}`, 'error');
+        }
+      });
+    }
+
+    // 跳转到指定题目并记录
+    function jumpToTaskAndRecord(index, id) {
+      if (!currentAdapter || typeof currentAdapter.jumpToTask !== 'function') {
+        updateStatus('当前适配器不支持跳转功能', 'error');
+        return;
+      }
+
+      console.log('[jumpToTaskAndRecord] 开始跳转，index:', index, 'id:', id);
+      updateStatus('正在跳转...', 'loading');
+      
+      // jumpToTask 现在返回 Promise
+      const result = currentAdapter.jumpToTask(index - 1, id);
+      
+      // 处理 Promise 结果
+      if (result && typeof result.then === 'function') {
+        result.then(success => {
+          if (success) {
+            recordReview(index);
+            updateStatus(`跳转到题号 ${index}`, 'info');
+            console.log('[jumpToTaskAndRecord] ✅ 跳转成功');
+          } else {
+            updateStatus('跳转失败', 'error');
+            console.log('[jumpToTaskAndRecord] ❌ 跳转失败');
+          }
+        }).catch(error => {
+          console.error('[jumpToTaskAndRecord] ❌ 跳转出错:', error);
+          updateStatus('跳转失败', 'error');
+        });
+      } else {
+        // 兼容同步返回
+        if (result) {
+          recordReview(index);
+          updateStatus(`跳转到题号 ${index}`, 'info');
+        } else {
+          updateStatus('跳转失败', 'error');
+        }
+      }
+    }
+
+    // 记录回评
+    function recordReview(index) {
+      reviewHistory[index] = (reviewHistory[index] || 0) + 1;
+      
+      // 更新列表中的对应项
+      const item = zeroScoreList.find(item => item.index === index);
+      if (item) {
+        item.reviewCount = reviewHistory[index];
+        window.updateZeroScoreList(zeroScoreList);
+      }
+    }
+
+    // 切换零分题列表显示
+    zeroScoreBtn.addEventListener('click', (e) => {
+      if (zeroScoreListShow) {
+        zeroScoreListEl.classList.remove('show');
+        zeroScoreBtn.textContent = '📋 显示零分题列表';
+        zeroScoreListShow = false;
+      } else {
+        extractZeroScoreList();
+      }
+    });
   }
 
   // 更新状态

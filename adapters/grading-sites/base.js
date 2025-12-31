@@ -68,6 +68,44 @@ class GradingSiteAdapter {
   }
 
   /**
+   * 获取 Angular Scope（用于零分题提取）
+   * @returns {Object|null} Angular scope 对象
+   */
+  getAngularScope() {
+    // 默认实现，子类可以覆盖
+    return null;
+  }
+
+  /**
+   * 提取所有题目列表
+   * @returns {Array} 题目列表 [{ index, id, score }]
+   */
+  extractAllTopicList() {
+    // 默认实现，子类需要覆盖
+    return [];
+  }
+
+  /**
+   * 提取零分题列表
+   * @returns {Array} 零分题列表 [{ index, id, score, reviewCount }]
+   */
+  extractZeroScoreList() {
+    // 默认实现，子类需要覆盖
+    return [];
+  }
+
+  /**
+   * 跳转到指定题目
+   * @param {number} idx 题目索引（从0开始）
+   * @param {string|number} id 题目ID
+   * @returns {boolean} 是否成功
+   */
+  jumpToTask(idx, id) {
+    // 默认实现，子类需要覆盖
+    return false;
+  }
+
+  /**
    * 注入悬浮控制 UI
    */
   injectUI() {
