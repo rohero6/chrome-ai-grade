@@ -41,11 +41,9 @@ const API_MODELS = {
     { value: 'gemini-pro-vision', label: 'Gemini Pro Vision' }
   ],
   modelscope: [
-    { value: 'qwen-vl-max', label: 'Qwen-VL-Max (推荐)' },
-    { value: 'qwen-vl-plus', label: 'Qwen-VL-Plus' },
     { value: 'Qwen/Qwen3-VL-235B-A22B-Instruct', label: 'Qwen3-VL-235B-A22B-Instruct' },
-    { value: 'qwen-vl', label: 'Qwen-VL' },
-    { value: 'qwen-turbo', label: 'Qwen Turbo' }
+    { value: 'Qwen/Qwen2.5-VL-72B-Instruct', label: 'Qwen/Qwen2.5-VL-72B-Instruct' },
+    { value: 'Qwen/Qwen3-VL-30B-A3B-Thinking', label: 'QQwen/Qwen3-VL-30B-A3B-Thinking' }
   ],
   zhipu: [
     { value: 'glm-4v-flash', label: 'GLM-4V Flash (推荐，免费)' },
@@ -53,7 +51,8 @@ const API_MODELS = {
     { value: 'glm-4', label: 'GLM-4 (纯文本)' },
     { value: 'glm-4-flash', label: 'GLM-4 Flash' },
     { value: 'glm-4.6v-flash', label: 'glm-4.6v-flash' },
-    { value: 'glm-4.6v', label: 'glm-4.6v' }
+    { value: 'glm-4.6v', label: 'glm-4.6v' },
+    { value: 'glm-4.5v', label: 'glm-4.5v' }
   ]
 };
 

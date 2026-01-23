@@ -95,6 +95,16 @@ class GradingSiteAdapter {
   }
 
   /**
+   * 提取满分题列表
+   * @param {Object} reviewHistory 回评历史记录 { index: reviewCount }
+   * @returns {Promise<Array>} 满分题列表 [{ index, id, score, maxScore, reviewCount }]
+   */
+  extractFullScoreList(reviewHistory = {}) {
+    // 默认实现，子类需要覆盖
+    return Promise.resolve([]);
+  }
+
+  /**
    * 跳转到指定题目
    * @param {number} idx 题目索引（从0开始）
    * @param {string|number} id 题目ID

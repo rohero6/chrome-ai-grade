@@ -209,6 +209,84 @@ class Wxy100Adapter extends GradingSiteAdapter {
   }
 
   /**
+   * 提取满分题列表（在页面上下文中执行）
+   * @param {Object} reviewHistory 回评历史记录 { index: reviewCount }
+   * @returns {Promise<Array>} 满分题列表 [{ index, id, score, maxScore, reviewCount }]
+   */
+  extractFullScoreList(reviewHistory = {}) {
+    console.log('[wxy100] 开始提取满分题');
+    console.log('[wxy100] reviewHistory:', reviewHistory);
+    console.log('[wxy100] window.__aiGradingExtractFullScore 存在:', typeof window.__aiGradingExtractFullScore !== 'undefined');
+    
+    return new Promise((resolve) => {
+      const requestId = 'full_' + Date.now() + '_' + Math.random();
+      console.log('[wxy100] requestId:', requestId);
+      
+      let resolved = false;
+      let timeoutId = null;
+      
+      // 监听页面返回的结果
+      const handler = (event) => {
+        console.log('[wxy100] 收到事件:', event.type, event.detail);
+        if (event.detail && event.detail.type === 'FULL_SCORE_RESULT' && event.detail.requestId === requestId) {
+          console.log('[wxy100] ✅ 收到匹配的结果，满分题数量:', event.detail.list?.length || 0);
+          if (timeoutId) clearTimeout(timeoutId);
+          document.removeEventListener('aiGradingResult', handler);
+          resolved = true;
+          resolve(event.detail.list || []);
+        } else {
+          console.log('[wxy100] ⚠️ 收到不匹配的事件:', event.detail?.requestId, '期望:', requestId);
+        }
+      };
+      document.addEventListener('aiGradingResult', handler);
+      console.log('[wxy100] ✅ 已添加事件监听器');
+      
+      // 设置超时
+      timeoutId = setTimeout(() => {
+        if (!resolved) {
+          console.log('[wxy100] ❌ 超时，未收到结果');
+          document.removeEventListener('aiGradingResult', handler);
+          resolve([]);
+        }
+      }, 3000);
+      
+      // 调用页面中的函数
+      if (window.__aiGradingExtractFullScore) {
+        console.log('[wxy100] ✅ 调用页面函数');
+        try {
+          window.__aiGradingExtractFullScore(reviewHistory, requestId);
+        } catch (e) {
+          console.error('[wxy100] ❌ 调用页面函数失败:', e);
+          if (timeoutId) clearTimeout(timeoutId);
+          document.removeEventListener('aiGradingResult', handler);
+          resolve([]);
+        }
+      } else {
+        console.log('[wxy100] ⚠️ 页面函数未注入，等待...');
+        // 如果函数还没注入，等待一下
+        setTimeout(() => {
+          if (window.__aiGradingExtractFullScore) {
+            console.log('[wxy100] ✅ 页面函数已注入，调用');
+            try {
+              window.__aiGradingExtractFullScore(reviewHistory, requestId);
+            } catch (e) {
+              console.error('[wxy100] ❌ 调用页面函数失败:', e);
+              if (timeoutId) clearTimeout(timeoutId);
+              document.removeEventListener('aiGradingResult', handler);
+              resolve([]);
+            }
+          } else {
+            console.log('[wxy100] ❌ 页面函数仍未注入');
+            if (timeoutId) clearTimeout(timeoutId);
+            document.removeEventListener('aiGradingResult', handler);
+            resolve([]);
+          }
+        }, 500);
+      }
+    });
+  }
+
+  /**
    * 跳转到指定题目（通过页面脚本执行）
    * @param {number} idx 题目索引（从0开始）
    * @param {string|number} id 题目ID

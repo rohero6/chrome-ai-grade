@@ -94,6 +94,109 @@
       }));
     }
   };
+
+  // 提取满分题列表
+  window.__aiGradingExtractFullScore = function(reviewHistory, requestId) {
+    console.log('[页面脚本] 开始提取满分题，requestId:', requestId);
+    console.log('[页面脚本] reviewHistory:', reviewHistory);
+    
+    try {
+      const el = document.querySelector('#frame2');
+      console.log('[页面脚本] #frame2 元素:', el ? '找到' : '未找到');
+      
+      if (!el) {
+        console.log('[页面脚本] ❌ 未找到 #frame2 元素');
+        document.dispatchEvent(new CustomEvent('aiGradingResult', {
+          detail: { type: 'FULL_SCORE_RESULT', requestId, list: [], error: '未找到 #frame2 元素' }
+        }));
+        return;
+      }
+      
+      if (typeof angular === 'undefined') {
+        console.log('[页面脚本] ❌ Angular 未加载');
+        document.dispatchEvent(new CustomEvent('aiGradingResult', {
+          detail: { type: 'FULL_SCORE_RESULT', requestId, list: [], error: 'Angular 未加载' }
+        }));
+        return;
+      }
+      
+      console.log('[页面脚本] ✅ Angular 已加载');
+      const scope = angular.element(el).scope();
+      console.log('[页面脚本] scope:', scope ? '找到' : '未找到');
+      
+      if (!scope) {
+        console.log('[页面脚本] ❌ 无法获取 scope');
+        document.dispatchEvent(new CustomEvent('aiGradingResult', {
+          detail: { type: 'FULL_SCORE_RESULT', requestId, list: [], error: '无法获取 Angular scope' }
+        }));
+        return;
+      }
+      
+      const taskList = scope?.taskList || scope?.$root?.taskList || [];
+      console.log('[页面脚本] taskList 长度:', taskList.length);
+      
+      if (taskList.length === 0) {
+        console.log('[页面脚本] ⚠️ taskList 为空');
+        document.dispatchEvent(new CustomEvent('aiGradingResult', {
+          detail: { type: 'FULL_SCORE_RESULT', requestId, list: [], error: 'taskList 为空' }
+        }));
+        return;
+      }
+      
+      // 打印第一道题的数据，查看是否有满分字段
+      if (taskList.length > 0) {
+        console.log('[页面脚本] 第一道题数据:', taskList[0]);
+        console.log('[页面脚本] 第一道题 score:', taskList[0].score, '类型:', typeof taskList[0].score);
+        console.log('[页面脚本] 第一道题 totalScore:', taskList[0].totalScore, 'maxScore:', taskList[0].maxScore, 'fullScore:', taskList[0].fullScore);
+      }
+      
+      // 提取满分题列表
+      // 尝试从题目数据中获取满分，如果没有则使用score作为满分（假设score就是满分）
+      const fullScoreList = taskList
+        .map((item, idx) => {
+          const currentScore = item.score || 0;
+          // 尝试获取满分：优先使用 totalScore, maxScore, fullScore，否则使用 score（如果score > 0）
+          const maxScore = item.totalScore || item.maxScore || item.fullScore || (currentScore > 0 ? currentScore : null);
+          
+          return {
+            index: idx + 1,
+            id: item.id,
+            score: currentScore,
+            maxScore: maxScore,
+            reviewCount: (reviewHistory[idx + 1] || 0)
+          };
+        })
+        .filter(item => {
+          // 如果当前分数等于满分，则认为是满分题
+          if (item.maxScore !== null && item.maxScore !== undefined) {
+            return item.score === item.maxScore;
+          }
+          // 如果没有满分信息，但分数大于0，也认为是满分（保守策略）
+          return item.score > 0;
+        });
+      
+      console.log('[页面脚本] ✅ 找到', fullScoreList.length, '道满分题');
+      console.log('[页面脚本] 满分题列表:', fullScoreList);
+      
+      // 打印分数分布
+      const scoreDist = {};
+      taskList.forEach(item => {
+        const score = item.score || 0;
+        scoreDist[score] = (scoreDist[score] || 0) + 1;
+      });
+      console.log('[页面脚本] 分数分布:', scoreDist);
+      
+      document.dispatchEvent(new CustomEvent('aiGradingResult', {
+        detail: { type: 'FULL_SCORE_RESULT', requestId, list: fullScoreList }
+      }));
+      console.log('[页面脚本] ✅ 已发送结果事件');
+    } catch (e) {
+      console.error('[页面脚本] ❌ 错误:', e);
+      document.dispatchEvent(new CustomEvent('aiGradingResult', {
+        detail: { type: 'FULL_SCORE_RESULT', requestId, list: [], error: e.message }
+      }));
+    }
+  };
   
   // 跳转到指定题目
   window.__aiGradingJumpToTask = function(idx, id) {
@@ -163,6 +266,9 @@
     if (event.detail && event.detail.type === 'extractZeroScore') {
       console.log('[页面脚本] 处理提取零分题请求');
       window.__aiGradingExtractZeroScore(event.detail.reviewHistory, event.detail.requestId);
+    } else if (event.detail && event.detail.type === 'extractFullScore') {
+      console.log('[页面脚本] 处理提取满分题请求');
+      window.__aiGradingExtractFullScore(event.detail.reviewHistory, event.detail.requestId);
     }
   });
   

@@ -556,6 +556,11 @@
           <div class="zero-score-stats" id="ai-zero-score-stats"></div>
           <div class="zero-score-list" id="ai-zero-score-list"></div>
         </div>
+        <div class="zero-score-section">
+          <button class="zero-score-btn" id="ai-full-score-btn">✅ 显示满分题列表</button>
+          <div class="zero-score-stats" id="ai-full-score-stats"></div>
+          <div class="zero-score-list" id="ai-full-score-list"></div>
+        </div>
         <div class="log-toggle" id="ai-log-toggle">📋 显示日志</div>
         <div class="log-container" id="ai-log-container"></div>
         <div class="drag-hint">↔ 拖动标题栏移动位置</div>
@@ -801,6 +806,98 @@
         zeroScoreListShow = false;
       } else {
         extractZeroScoreList();
+      }
+    });
+
+    // 满分题列表功能
+    const fullScoreBtn = document.getElementById('ai-full-score-btn');
+    const fullScoreListEl = document.getElementById('ai-full-score-list');
+    const fullScoreStats = document.getElementById('ai-full-score-stats');
+    let fullScoreListShow = false;
+
+    // 更新满分题列表显示
+    window.updateFullScoreList = function(list) {
+      fullScoreListEl.innerHTML = '';
+      
+      if (list.length === 0) {
+        fullScoreListEl.innerHTML = '<div style="padding: 8px; text-align: center; opacity: 0.7;">暂无满分题</div>';
+        fullScoreStats.textContent = '';
+        return;
+      }
+
+      fullScoreStats.textContent = `共 ${list.length} 道满分题`;
+      
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'zero-score-item';
+        div.innerHTML = `
+          <div class="zero-score-item-info">
+            题号 ${item.index} (${item.score}${item.maxScore ? '/' + item.maxScore : ''}分)
+            <span class="zero-score-item-count">回评 ${item.reviewCount} 次</span>
+          </div>
+        `;
+        div.addEventListener('click', () => {
+          jumpToTaskAndRecord(item.index - 1, item.id);
+        });
+        fullScoreListEl.appendChild(div);
+      });
+    };
+
+    // 提取满分题列表
+    async function extractFullScoreList() {
+      if (!currentAdapter || typeof currentAdapter.extractFullScoreList !== 'function') {
+        console.log('[extractFullScoreList] ❌ 适配器不支持满分题提取');
+        updateStatus('当前适配器不支持满分题提取', 'error');
+        if (typeof window.addLog === 'function') {
+          window.addLog('当前适配器不支持满分题提取功能', 'error');
+        }
+        return;
+      }
+
+      try {
+        updateStatus('正在提取满分题...', 'loading');
+        if (typeof window.addLog === 'function') {
+          window.addLog('开始提取满分题列表...', 'info');
+        }
+
+        // 获取回评历史
+        const reviewHistory = window.reviewHistory || {};
+
+        const list = await currentAdapter.extractFullScoreList(reviewHistory);
+        
+        if (typeof window.addLog === 'function') {
+          window.addLog(`提取完成，找到 ${list.length} 道满分题`, list.length > 0 ? 'success' : 'info');
+        }
+
+        if (list.length > 0) {
+          fullScoreListEl.classList.add('show');
+          fullScoreBtn.textContent = '✅ 隐藏满分题列表';
+          updateStatus(`找到 ${list.length} 道满分题`, 'success');
+        } else {
+          fullScoreListEl.classList.remove('show');
+          fullScoreBtn.textContent = '✅ 显示满分题列表';
+          updateStatus('没有满分题', 'info');
+        }
+
+        window.updateFullScoreList(list);
+      } catch (error) {
+        console.error('[AI阅卷] 提取满分题失败:', error);
+        updateStatus('提取满分题失败: ' + error.message, 'error');
+        if (typeof window.addLog === 'function') {
+          window.addLog('提取满分题失败: ' + error.message, 'error');
+        }
+      }
+    }
+
+    // 切换满分题列表显示
+    fullScoreBtn.addEventListener('click', (e) => {
+      if (fullScoreListShow) {
+        fullScoreListEl.classList.remove('show');
+        fullScoreBtn.textContent = '✅ 显示满分题列表';
+        fullScoreListShow = false;
+      } else {
+        extractFullScoreList();
+        fullScoreListShow = true;
       }
     });
   }
